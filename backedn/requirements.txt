@@ -5,3 +5,7 @@ langchain-community
 pdfplumber
 faiss-cpu
 tiktoken
+
+langchain-groq
+langchain-huggingface
+sentence-transformers

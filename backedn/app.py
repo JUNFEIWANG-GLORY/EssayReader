@@ -5,7 +5,8 @@ import asyncio
 from typing import List
 
 # LangChain Imports
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_groq import ChatGroq
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -29,18 +30,20 @@ def local_css():
 # --- Logic Classes ---
 
 class PaperAgent:
-    def __init__(self, api_key: str, base_url: str, model_name: str):
-        self.llm = ChatOpenAI(
+    def __init__(self, api_key: str, model_name: str):
+        self.llm = ChatGroq(
+            groq_api_key=api_key,
             model_name=model_name,
-            openai_api_key=api_key,
-            openai_api_base=base_url,
-            temperature=0,
+            temperature=0.7,
             streaming=True
         )
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=api_key,
-            openai_api_base=base_url
+
+        # 2. 替换为 HuggingFace 的免费本地 Embedding 模型
+        # 首次运行时会自动下载大约 90MB 的模型权重到本地
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2"
         )
+
         self.memory = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True,
@@ -93,15 +96,24 @@ class PaperAgent:
 
 async def main():
     local_css()
-    st.title("📖 ScholarAI: Advanced Paper Agent")
-    st.subheader("Deep Insight through Retrieval-Augmented Generation")
+    st.title("⚡ ScholarAI: Powered by Groq & Llama 3")
+    st.subheader("Ultra-fast Retrieval-Augmented Generation")
 
     # Sidebar for Setup
     with st.sidebar:
         st.header("🔑 Authentication")
-        api_key = st.text_input("API Key", type="password", help="Enter your OpenAI or DeepSeek Key")
-        base_url = st.text_input("Base URL", value="https://api.openai.com/v1")
-        model_choice = st.selectbox("Model", ["gpt-4o", "deepseek-chat", "gpt-3.5-turbo"])
+        api_key = st.text_input("Groq API Key", type="password", help="Enter your Groq API Key")
+
+        # 更新下拉菜单为 Groq 支持的模型
+        model_choice = st.selectbox(
+            "Model",
+            [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it"
+            ]
+        )
 
         st.divider()
         uploaded_file = st.file_uploader("Upload Research Paper (PDF)", type="pdf")
@@ -119,8 +131,9 @@ async def main():
     # Processing Logic
     if uploaded_file and api_key:
         if st.session_state.vector_db is None:
-            with st.status("Analyzing Paper Geometry...") as status:
-                agent = PaperAgent(api_key, base_url, model_choice)
+            with st.status("Analyzing Paper & Generating Local Embeddings...") as status:
+
+                agent = PaperAgent(api_key, model_choice)
                 st.session_state.vector_db = agent.ingest_pdf(uploaded_file)
                 st.session_state.agent_instance = agent
                 status.update(label="Analysis Complete!", state="complete")
@@ -132,7 +145,7 @@ async def main():
 
     if prompt := st.chat_input("Ask about methodology, results, or conclusions..."):
         if not api_key:
-            st.warning("Please provide an API Key in the sidebar.")
+            st.warning("Please provide a Groq API Key in the sidebar.")
             return
 
         st.session_state.messages.append({"role": "user", "content": prompt})
